@@ -1,0 +1,61 @@
+═══════════════════════════════════════════════════════════════
+                    NEW TASK ASSIGNED
+═══════════════════════════════════════════════════════════════
+
+Hi {{staff_name}},
+
+Thank you for your continued dedication! A new task has been assigned 
+to you, and we appreciate your prompt attention to this matter.
+
+───────────────────────────────────────────────────────────────
+TASK DETAILS
+───────────────────────────────────────────────────────────────
+
+Task Title: {{task_title}}
+
+{{#if task_description}}
+Description: {{task_description}}
+{{/if}}
+
+Location: {{trashcan_name}} - {{location}}
+
+Priority: {{priority}}
+
+{{#if due_date}}
+Due Date: {{due_date}}
+{{/if}}
+
+{{#if estimated_duration}}
+Estimated Duration: {{estimated_duration}} minutes
+{{/if}}
+
+Assigned On: {{assigned_date}}
+
+───────────────────────────────────────────────────────────────
+NEXT STEPS
+───────────────────────────────────────────────────────────────
+
+• Please review the task details above
+• Plan your schedule accordingly to meet the deadline
+• Update the task status in the app once you begin work
+• Contact your supervisor if you have any questions
+
+───────────────────────────────────────────────────────────────
+
+View Task in App: {{app_link}}
+
+───────────────────────────────────────────────────────────────
+
+We trust you'll handle this task with your usual professionalism. 
+If you have any questions or need assistance, please don't hesitate 
+to reach out.
+
+Best regards,
+The {{company_name}} Team
+
+───────────────────────────────────────────────────────────────
+This is an automated notification. Please do not reply to this email.
+If you have questions, please contact your supervisor directly.
+═══════════════════════════════════════════════════════════════
+
+
