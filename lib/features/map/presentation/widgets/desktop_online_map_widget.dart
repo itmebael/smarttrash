@@ -204,23 +204,6 @@ class _DesktopOnlineMapWidgetState
     }
   }
 
-  IconData _getStatusIcon(TrashcanStatus status) {
-    switch (status) {
-      case TrashcanStatus.empty:
-        return Icons.check_circle_outline;
-      case TrashcanStatus.half:
-        return Icons.schedule;
-      case TrashcanStatus.full:
-        return Icons.warning_amber;
-      case TrashcanStatus.maintenance:
-        return Icons.build;
-      case TrashcanStatus.offline:
-        return Icons.cloud_off;
-      case TrashcanStatus.alive:
-        return Icons.check_circle;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Stack(

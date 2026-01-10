@@ -12,6 +12,8 @@ class ExcelExportService {
       List<String> headers = [
         'Name',
         'Assign Bin',
+        'Priority Level',
+        'Status',
         'Completed Task',
         'Assign Date',
         'Completed Date',
@@ -28,6 +30,8 @@ class ExcelExportService {
         List<String> row = [
           report.assignedStaffName ?? 'Unassigned',
           report.trashcanName,
+          report.priority,
+          report.status,
           report.status == 'completed' ? 'Yes' : 'No',
           _formatDate(report.createdAt),
           report.completedAt != null ? _formatDate(report.completedAt!) : 'N/A',
@@ -77,6 +81,8 @@ class ExcelExportService {
       html.writeln('<tr>');
       html.writeln('<th>Name</th>');
       html.writeln('<th>Assign Bin</th>');
+      html.writeln('<th>Priority Level</th>');
+      html.writeln('<th>Status</th>');
       html.writeln('<th>Completed Task</th>');
       html.writeln('<th>Assign Date</th>');
       html.writeln('<th>Completed Date</th>');
@@ -90,6 +96,8 @@ class ExcelExportService {
         html.writeln(
             '<td>${_escapeHtml(report.assignedStaffName ?? 'Unassigned')}</td>');
         html.writeln('<td>${_escapeHtml(report.trashcanName)}</td>');
+        html.writeln('<td>${_escapeHtml(report.priority)}</td>');
+        html.writeln('<td>${_escapeHtml(report.status)}</td>');
         html.writeln(
             '<td class="$statusClass">${report.status == 'completed' ? 'Yes' : 'No'}</td>');
         html.writeln('<td>${_formatDate(report.createdAt)}</td>');
@@ -142,6 +150,8 @@ class ExcelExportService {
       List<String> headers = [
         'Name',
         'Assign Bin',
+        'Priority Level',
+        'Status',
         'Completed Task',
         'Assign Date',
         'Completed Date',
@@ -157,6 +167,8 @@ class ExcelExportService {
         List<String> row = [
           report.assignedStaffName ?? 'Unassigned',
           report.trashcanName,
+          report.priority,
+          report.status,
           report.status == 'completed' ? 'Yes' : 'No',
           _formatDate(report.createdAt),
           report.completedAt != null ? _formatDate(report.completedAt!) : 'N/A',

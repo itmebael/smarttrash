@@ -25,6 +25,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage>
   late Animation<Offset> _slideAnimation;
   String _selectedExportFormat = 'csv';
   String _selectedDateRange = 'all'; // 'all', 'today', 'week', 'month', 'custom'
+  String _selectedPriority = 'all'; // 'all', 'low', 'medium', 'high', 'urgent'
+  String _selectedStatus = 'all'; // 'all', 'pending', 'in_progress', 'completed'
   DateTime? _customStartDate;
   DateTime? _customEndDate;
 
@@ -551,11 +553,14 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage>
 
     // Get date range based on selection
     final dateRange = _getDateRange();
-    final reportAsync = dateRange != null
-        ? ref.watch(tasksReportByDateRangeProvider(
-            (startDate: dateRange.startDate, endDate: dateRange.endDate),
-          ))
-        : ref.watch(allTasksReportProvider);
+    
+    // Use the new filtered provider
+    final reportAsync = ref.watch(filteredTasksReportProvider((
+      startDate: dateRange?.startDate,
+      endDate: dateRange?.endDate,
+      status: _selectedStatus,
+      priority: _selectedPriority,
+    )));
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -690,6 +695,80 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage>
               ],
             ),
           ],
+          
+          const SizedBox(height: 16),
+
+          // Priority and Status Selection Row
+          Row(
+            children: [
+              // Priority Selection
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Priority',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: isDark ? AppTheme.textGray : AppTheme.lightTextPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButton<String>(
+                      value: _selectedPriority,
+                      isExpanded: true,
+                      dropdownColor: isDark ? AppTheme.darkGray : Colors.white,
+                      items: const [
+                        DropdownMenuItem(value: 'all', child: Text('All Priorities')),
+                        DropdownMenuItem(value: 'low', child: Text('Low')),
+                        DropdownMenuItem(value: 'medium', child: Text('Medium')),
+                        DropdownMenuItem(value: 'high', child: Text('High')),
+                        DropdownMenuItem(value: 'urgent', child: Text('Urgent')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedPriority = value);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Status Selection
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Status',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: isDark ? AppTheme.textGray : AppTheme.lightTextPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButton<String>(
+                      value: _selectedStatus,
+                      isExpanded: true,
+                      dropdownColor: isDark ? AppTheme.darkGray : Colors.white,
+                      items: const [
+                        DropdownMenuItem(value: 'all', child: Text('All Statuses')),
+                        DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                        DropdownMenuItem(value: 'in_progress', child: Text('In Progress')),
+                        DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedStatus = value);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
           
           const SizedBox(height: 16),
           
@@ -1108,7 +1187,13 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage>
 
   Widget _buildTasksTable() {
     final isDark = ref.watch(isDarkModeProvider);
-    final reportAsync = ref.watch(allTasksReportProvider);
+    final dateRange = _getDateRange();
+    final reportAsync = ref.watch(filteredTasksReportProvider((
+      startDate: dateRange?.startDate,
+      endDate: dateRange?.endDate,
+      status: _selectedStatus,
+      priority: _selectedPriority,
+    )));
 
     return Container(
       padding: const EdgeInsets.all(24),

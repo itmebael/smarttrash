@@ -287,9 +287,12 @@ class NotificationDataService {
 
   // Stop listening for real-time notifications
   static void stopListening() {
-    _notificationChannel?.unsubscribe();
-    _notificationChannel = null;
-    print('🛑 Stopped listening for real-time notifications');
+    // Only unsubscribe if channel exists
+    if (_notificationChannel != null) {
+      _notificationChannel?.unsubscribe();
+      _notificationChannel = null;
+      print('🛑 Stopped listening for real-time notifications');
+    }
   }
 }
 

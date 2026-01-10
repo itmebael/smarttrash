@@ -148,73 +148,7 @@ class EmailService {
     }
   }
 
-  /// Send email using EmailJS API (direct - may fail in Flutter due to browser restriction)
-  /// This method is kept as fallback but will likely return 403 error
-  static Future<bool> _sendEmailViaEmailJS({
-    required String to,
-    required String subject,
-    required String htmlBody,
-    required String textBody,
-    required String staffName,
-    required Map<String, dynamic> templateData,
-  }) async {
-    // EmailJS blocks non-browser requests, so we'll use Edge Function instead
-    // This method is kept for reference but won't work from Flutter
-    print('⚠️ EmailJS direct API calls are disabled for non-browser apps');
-    print('   Using Supabase Edge Function instead...');
-    return false;
-  }
 
-  /// Send email using Resend API (alternative - works offline)
-  static Future<bool> _sendEmailViaResend({
-    required String to,
-    required String subject,
-    required String htmlBody,
-    required String textBody,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse(resendApiUrl),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'from': '$fromName <$fromEmail>',
-          'to': [to],
-          'subject': subject,
-          'html': htmlBody,
-          'text': textBody,
-          if (templateId.isNotEmpty) 'template_id': templateId,
-        }),
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Email request timeout');
-        },
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        try {
-          final responseData = jsonDecode(response.body);
-          print('📧 Email sent successfully via Resend: ${responseData['id']}');
-        } catch (e) {
-          // Response might not be JSON, but status code indicates success
-          print('📧 Email sent successfully via Resend (status: ${response.statusCode})');
-        }
-        return true;
-      } else {
-        print('⚠️ Resend API returned status ${response.statusCode}');
-        // Still return true - don't block task creation
-        return true;
-      }
-    } catch (e) {
-      // Network error - don't fail the task creation
-      print('⚠️ Email sending failed (offline or network error): $e');
-      print('✅ Task saved successfully - email will be sent when online');
-      return true;
-    }
-  }
 
   /// Alternative: Send email using template (if your service supports templates)
   static Future<bool> sendEmailWithTemplate({
@@ -261,7 +195,7 @@ class EmailService {
     return true;
   }
 
-  /// Prepare template data for template-based emails
+  /// Prepare template data for email
   static Map<String, dynamic> prepareTemplateData({
     required String staffName,
     required String taskTitle,
@@ -271,24 +205,24 @@ class EmailService {
     required String priority,
     DateTime? dueDate,
     int? estimatedDuration,
-    DateTime? assignedDate,
+    required DateTime assignedDate,
   }) {
+    // Helper to format date
+    String formatDate(DateTime? date) {
+      if (date == null) return 'N/A';
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    }
+
     return {
       'staff_name': staffName,
       'task_title': taskTitle,
-      'task_description': taskDescription ?? '',
+      'task_description': taskDescription ?? 'No description provided',
       'trashcan_name': trashcanName,
       'location': location,
-      'priority': priority.toUpperCase(),
-      'due_date': dueDate != null
-          ? dueDate.toIso8601String()
-          : '',
-      'estimated_duration': estimatedDuration ?? 0,
-      'assigned_date': assignedDate != null
-          ? assignedDate.toIso8601String()
-          : DateTime.now().toIso8601String(),
-      'company_name': EmailTemplateService.companyName,
-      'app_link': EmailTemplateService.appLink,
+      'priority': priority,
+      'due_date': formatDate(dueDate),
+      'estimated_duration': estimatedDuration != null ? '$estimatedDuration min' : 'N/A',
+      'assigned_date': formatDate(assignedDate),
     };
   }
 }

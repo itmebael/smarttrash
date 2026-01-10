@@ -80,6 +80,8 @@ class TaskReport {
     return {
       'Name': assignedStaffName ?? 'Unassigned',
       'Assign Bin': trashcanName,
+      'Priority Level': priority,
+      'Status': status,
       'Completed Task': status == 'completed' ? 'Yes' : 'No',
       'Assign Date': createdAt.toString().split('.')[0],
       'Completed Date': completedAt?.toString().split('.')[0] ?? 'N/A',
@@ -200,6 +202,63 @@ class AnalyticsService {
       return reports;
     } catch (e) {
       print('❌ Error fetching tasks report: $e');
+      return [];
+    }
+  }
+
+  // Get filtered tasks report
+  static Future<List<TaskReport>> getFilteredTasksReport({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? status,
+    String? priority,
+  }) async {
+    try {
+      print('📊 Fetching filtered tasks report...');
+      
+      var query = _supabase.from('tasks').select('''
+            id,
+            title,
+            priority,
+            status,
+            created_at,
+            completed_at,
+            completion_notes,
+            trashcan_id,
+            assigned_staff_id,
+            trashcans!inner(name, location, status, is_active, device_id),
+            assigned_staff:assigned_staff_id(name),
+            created_by:created_by_admin_id(name)
+          ''');
+
+      if (startDate != null) {
+        query = query.gte('created_at', startDate.toIso8601String());
+      }
+      
+      if (endDate != null) {
+        query = query.lte('created_at', endDate.toIso8601String());
+      }
+
+      if (status != null && status != 'all') {
+        query = query.eq('status', status);
+      }
+
+      if (priority != null && priority != 'all') {
+        query = query.eq('priority', priority);
+      }
+      
+      final response = await query.order('created_at', ascending: false);
+
+      final reports = (response as List).map((task) {
+        final trashcan = task['trashcans'] as Map<String, dynamic>?;
+        final staff = task['assigned_staff'] as Map<String, dynamic>?;
+        return _createTaskReportFiltered(task: task, trashcan: trashcan, staff: staff);
+      }).whereType<TaskReport>().toList();
+
+      print('✅ Fetched ${reports.length} filtered tasks');
+      return reports;
+    } catch (e) {
+      print('❌ Error fetching filtered tasks report: $e');
       return [];
     }
   }

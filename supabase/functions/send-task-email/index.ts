@@ -120,6 +120,7 @@ async function handleRequest(req: Request): Promise<Response> {
     // Prepare EmailJS template parameters
     const templateParams = {
       to_email: body.to_email,
+      'to email': body.to_email, // Add support for space in variable name as requested
       to_name: body.staff_name,
       subject: `📋 New Task Assigned: ${body.task_title}`,
       staff_name: body.staff_name,

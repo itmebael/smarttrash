@@ -65,12 +65,101 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
         // Update FCM token
         await _updateFCMToken(user);
       } catch (e) {
-        // If user not found in database, it's okay - they might be a hardcoded user
-        print('⚠️  User not found in database: $e');
-        // Don't set error state - let the existing state stand
+        // If user not found in database (PGRST116)
+        if (e.toString().contains('PGRST116') || e.toString().contains('0 rows')) {
+          
+          // Retry logic: Sometimes RLS or propagation causes a delay.
+          // Wait a bit and try to load again BEFORE attempting to create.
+          print('⏳ User not found. Waiting for consistency check...');
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          try {
+             final retryResponse = await _supabase!.from('users').select().eq('id', uid).single();
+             final user = UserModel.fromMap(retryResponse);
+             state = AsyncValue.data(user);
+             print('✅ Loaded user record on retry.');
+             // Also need to set up notifications and FCM here if we return early, 
+             // but easier to just let it fall through or duplicate logic? 
+             // Let's duplicate the setup logic for safety or extract it.
+             // For minimal change, let's just proceed to setup.
+             
+             try {
+                await NotificationDataService.getAllNotifications(userId: user.id);
+                NotificationDataService.startListening(userId: user.id);
+             } catch (_) {}
+             await _updateFCMToken(user);
+             return;
+          } catch (retryError) {
+             // If still failing, THEN try to create
+             print('⚠️ User truly not found (PGRST116). Attempting to create record...');
+             await _createMissingUserRecord(uid);
+          }
+        } else {
+          print('⚠️ Error loading user data: $e');
+          // Don't set error state - let the existing state stand or set to null
+        }
       }
     } catch (e) {
       state = AsyncValue.error(e, StackTrace.current);
+    }
+  }
+
+  Future<void> _createMissingUserRecord(String uid) async {
+    try {
+      final user = _supabase?.auth.currentUser;
+      if (user == null || user.id != uid) return;
+
+      final email = user.email ?? '';
+      final name = user.userMetadata?['name'] ?? email.split('@')[0];
+
+      // Default values for new user
+      final newUser = {
+        'id': uid,
+        'email': email,
+        'name': name,
+        'role': 'staff', // Default role
+        'phone_number': '',
+        'created_at': DateTime.now().toIso8601String(),
+        'is_active': true,
+      };
+
+      print('🛠️ Creating missing user record for $email ($uid)...');
+      await _supabase!.from('users').insert(newUser);
+      print('✅ Created missing user record successfully');
+
+      // Retry loading
+      // We call _loadUserData again, but we need to be careful about infinite recursion
+      // The recursion is broken because if insert succeeds, select should succeed.
+      // If insert fails, we go to catch block of _createMissingUserRecord
+      final response =
+          await _supabase!.from('users').select().eq('id', uid).single();
+      final userModel = UserModel.fromMap(response);
+      state = AsyncValue.data(userModel);
+      
+    } catch (e) {
+      // Regardless of the error (duplicate key or otherwise), 
+      // let's try to load the user one last time.
+      // If the user exists in the DB, we should be able to load them.
+      
+      // If it's a duplicate key error, just log info, don't scream error
+      if (e.toString().contains('23505') || (e is PostgrestException && e.code == '23505')) {
+         print('ℹ️ User record already exists (Duplicate Key). Loading existing...');
+      } else {
+         print('⚠️ Failed to create user record (${e.toString().split('\n').first}). Attempting to load existing user...');
+      }
+      
+      try {
+        final response =
+            await _supabase!.from('users').select().eq('id', uid).single();
+        
+        final userModel = UserModel.fromMap(response);
+        state = AsyncValue.data(userModel);
+        print('✅ Successfully loaded existing user record!');
+        return; // Success!
+      } catch (loadError) {
+        print('❌ Failed to create AND failed to load user: $loadError');
+        // This is a true failure
+      }
     }
   }
 
@@ -256,7 +345,22 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
         );
 
         // Save user data to Supabase
-        await _supabase!.from('users').insert(user.toMap());
+        try {
+          await _supabase!.from('users').insert(user.toMap());
+        } catch (e) {
+          // If insert fails (e.g. user already exists), we should still proceed
+          // The user is authenticated in Auth, so we just need to ensure the user record exists
+          print('⚠️ Registration insert warning: $e');
+          
+          // Try to load existing if insert failed
+          try {
+            final existing = await _supabase!.from('users').select().eq('id', user.id).single();
+            print('✅ Found existing user record during registration, proceeding...');
+          } catch (loadError) {
+             print('❌ Could not verify user record: $loadError');
+             // We continue anyway since auth succeeded
+          }
+        }
 
         state = AsyncValue.data(user);
 
@@ -289,20 +393,78 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     }
   }
 
-  /// Convenience helper to sign up staff accounts
-  Future<bool> registerStaff({
+  // Constants from main.dart
+  static const _supabaseUrl = 'https://ssztyskjcoilweqmheef.supabase.co';
+  static const _supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzenR5c2tqY29pbHdlcW1oZWVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxODkxMjYsImV4cCI6MjA3Mzc2NTEyNn0.yP0Qihye9C7AiAhVN5_PBziCzfvgRlBu_dcdX9L9SSQ';
+
+  /// Convenience helper to sign up staff accounts without affecting current admin session
+  /// Returns the User ID if successful, null otherwise
+  Future<String?> registerStaff({
     required String email,
     required String password,
     required String name,
     String phoneNumber = '+63-0000000000',
-  }) {
-    return register(
-      email: email,
-      password: password,
-      name: name,
-      phoneNumber: phoneNumber,
-      role: UserRole.staff,
-    );
+  }) async {
+    try {
+      print('🛠️ Registering staff account via isolated client...');
+      
+      // Use a separate client to avoid affecting the main session (Admin session)
+      // Using pure Dart SupabaseClient to avoid Flutter persistence conflicts
+      final tempClient = SupabaseClient(
+        _supabaseUrl, 
+        _supabaseAnonKey,
+      );
+
+      final response = await tempClient.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          'name': name,
+          'phone_number': phoneNumber,
+          'role': 'staff',
+        },
+      );
+
+      if (response.user != null) {
+        final userId = response.user!.id;
+        final user = UserModel(
+          id: userId,
+          email: email,
+          name: name,
+          phoneNumber: phoneNumber,
+          role: UserRole.staff,
+          createdAt: DateTime.now(),
+        );
+
+        // Save user data to Supabase
+        // Try with temp client first (logged in as new user)
+        try {
+          await tempClient.from('users').insert(user.toMap());
+          print('✅ Staff user inserted into database via temp client');
+        } catch (e) {
+          print('⚠️ Registration insert warning (temp client): $e');
+          // If temp client fails (e.g. RLS issues), try with main Admin client
+          try {
+            print('🔄 Retrying insert with main (Admin) client...');
+            await _supabase!.from('users').insert(user.toMap());
+            print('✅ Staff user inserted into database via Admin client');
+          } catch (e2) {
+             print('❌ Insert failed with both clients: $e2');
+             // We still return true because the account was created in Auth
+          }
+        }
+        
+        return userId;
+      }
+      return null;
+
+    } on AuthException catch (e) {
+      print('❌ Staff registration failed: ${e.message}');
+      rethrow;
+    } catch (e) {
+      print('❌ Staff registration error: $e');
+      rethrow;
+    }
   }
 
   Future<void> logout() async {

@@ -15,6 +15,19 @@ final tasksReportByDateRangeProvider = FutureProvider.family<List<TaskReport>,
   );
 });
 
+// Get filtered tasks report
+final filteredTasksReportProvider = FutureProvider.family<List<TaskReport>,
+    ({DateTime? startDate, DateTime? endDate, String? status, String? priority})>(
+  (ref, params) async {
+    return await AnalyticsService.getFilteredTasksReport(
+      startDate: params.startDate,
+      endDate: params.endDate,
+      status: params.status,
+      priority: params.priority,
+    );
+  },
+);
+
 // Get tasks by status
 final tasksByStatusProvider = FutureProvider.family<List<TaskReport>, String>(
   (ref, status) async {

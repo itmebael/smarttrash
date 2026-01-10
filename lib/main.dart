@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/theme/app_theme.dart';
 import 'core/routes/app_router.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/safe_local_storage.dart' as safe_storage;
 // import 'core/services/location_service.dart'; // Temporarily disabled
 import 'core/providers/theme_provider.dart';
 
@@ -14,8 +15,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize SharedPreferences FIRST (needed by Supabase)
+  SharedPreferences? prefs;
   try {
-    await SharedPreferences.getInstance();
+    prefs = await SharedPreferences.getInstance();
     print('✅ SharedPreferences initialized');
   } catch (e) {
     print('⚠️ SharedPreferences initialization error: $e');
@@ -36,8 +38,11 @@ void main() async {
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
-      authOptions: const FlutterAuthClientOptions(
+      authOptions: FlutterAuthClientOptions(
         authFlowType: AuthFlowType.implicit,
+        // Use our safe local storage if prefs is available, otherwise let Supabase use default (which might fail)
+        // or provide a dummy implementation if prefs is null
+        localStorage: prefs != null ? safe_storage.SafeLocalStorage(prefs) : const safe_storage.EmptyLocalStorage(),
       ),
       debug: true,
     );
