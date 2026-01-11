@@ -131,15 +131,12 @@ class UserService {
     }
   }
 
-  /// Delete user (soft delete by setting is_active to false)
+  /// Delete user (Hard delete)
   static Future<bool> deleteUser(String userId) async {
     try {
       await _supabase
           .from('users')
-          .update({
-            'is_active': false,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
+          .delete()
           .eq('id', userId);
 
       return true;

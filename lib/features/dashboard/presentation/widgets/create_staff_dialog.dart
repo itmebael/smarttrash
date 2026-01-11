@@ -4,9 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/user_model.dart';
+import '../../../../core/providers/auth_provider.dart';
 
 class CreateStaffDialog extends ConsumerStatefulWidget {
-  final Function(UserModel) onStaffCreated;
+  final Function(UserModel?) onStaffCreated;
 
   const CreateStaffDialog({
     super.key,
@@ -682,114 +683,43 @@ class _CreateStaffDialogState extends ConsumerState<CreateStaffDialog> {
       print('📧 Email: $email');
       print('👤 Name: $name');
 
-      // Step 1: Create Supabase Auth user
-      print('📝 Step 1: Creating Supabase Auth user...');
-      final authResponse = await Supabase.instance.client.auth.signUp(
+      // Use AuthProvider to create staff securely via Edge Function
+      final userId = await ref.read(authProvider.notifier).registerStaff(
         email: email,
         password: password,
-      );
-
-      if (authResponse.user == null) {
-        throw Exception('Failed to create auth user');
-      }
-
-      final userId = authResponse.user!.id;
-      print('✅ Auth user created: $userId');
-
-      // Step 2: Create database record
-      print('📝 Step 2: Creating database record...');
-      await Supabase.instance.client.from('users').insert({
-        'id': userId,
-        'email': email,
-        'name': name,
-        'phone_number': _phoneController.text.trim(),
-        'role': _selectedRole.name,
-        'is_active': true,
-        'age': _ageController.text.isNotEmpty
-            ? int.tryParse(_ageController.text)
-            : null,
-        'address': _addressController.text.trim().isNotEmpty
-            ? _addressController.text.trim()
-            : null,
-        'city': _cityController.text.trim().isNotEmpty
-            ? _cityController.text.trim()
-            : null,
-        'state': _stateController.text.trim().isNotEmpty
-            ? _stateController.text.trim()
-            : null,
-        'zip_code': _zipCodeController.text.trim().isNotEmpty
-            ? _zipCodeController.text.trim()
-            : null,
-        'department': _departmentController.text.trim().isNotEmpty
-            ? _departmentController.text.trim()
-            : null,
-        'position': _positionController.text.trim().isNotEmpty
-            ? _positionController.text.trim()
-            : null,
-        'date_of_birth': _selectedDateOfBirth?.toIso8601String(),
-        'emergency_contact': _emergencyContactController.text.trim().isNotEmpty
-            ? _emergencyContactController.text.trim()
-            : null,
-        'emergency_phone': _emergencyPhoneController.text.trim().isNotEmpty
-            ? _emergencyPhoneController.text.trim()
-            : null,
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      });
-
-      print('✅ Database record created');
-
-      final newStaff = UserModel(
-        id: userId,
-        email: email,
         name: name,
         phoneNumber: _phoneController.text.trim(),
-        role: _selectedRole,
-        createdAt: DateTime.now(),
-        isActive: true,
-        age: _ageController.text.isNotEmpty
-            ? int.tryParse(_ageController.text)
-            : null,
-        address: _addressController.text.trim().isNotEmpty
-            ? _addressController.text.trim()
-            : null,
-        city: _cityController.text.trim().isNotEmpty
-            ? _cityController.text.trim()
-            : null,
-        state: _stateController.text.trim().isNotEmpty
-            ? _stateController.text.trim()
-            : null,
-        zipCode: _zipCodeController.text.trim().isNotEmpty
-            ? _zipCodeController.text.trim()
-            : null,
-        department: _departmentController.text.trim().isNotEmpty
-            ? _departmentController.text.trim()
-            : null,
-        position: _positionController.text.trim().isNotEmpty
-            ? _positionController.text.trim()
-            : null,
+        department: _departmentController.text.trim().isEmpty ? null : _departmentController.text.trim(),
+        position: _positionController.text.trim().isEmpty ? null : _positionController.text.trim(),
+        address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
+        city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
+        state: _stateController.text.trim().isEmpty ? null : _stateController.text.trim(),
+        zipCode: _zipCodeController.text.trim().isEmpty ? null : _zipCodeController.text.trim(),
+        age: _ageController.text.isEmpty ? null : int.tryParse(_ageController.text),
         dateOfBirth: _selectedDateOfBirth,
-        emergencyContact: _emergencyContactController.text.trim().isNotEmpty
-            ? _emergencyContactController.text.trim()
-            : null,
-        emergencyPhone: _emergencyPhoneController.text.trim().isNotEmpty
-            ? _emergencyPhoneController.text.trim()
-            : null,
+        emergencyContact: _emergencyContactController.text.trim().isEmpty ? null : _emergencyContactController.text.trim(),
+        emergencyPhone: _emergencyPhoneController.text.trim().isEmpty ? null : _emergencyPhoneController.text.trim(),
       );
+
+      if (userId == null) {
+        throw Exception('Failed to create staff account. Please try again.');
+      }
+
+      print('✅ Staff created via AuthProvider: $userId');
 
       setState(() {
         _isLoading = false;
       });
 
-      widget.onStaffCreated(newStaff);
+      // Notify parent to refresh list
+      widget.onStaffCreated(null);
       Navigator.of(context).pop();
 
       // Show success message
       if (mounted) {
-        print('✅ Staff account created successfully!');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${newStaff.name} created and can now login!'),
+            content: Text('✅ $name created successfully!'),
             backgroundColor: AppTheme.primaryGreen,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(

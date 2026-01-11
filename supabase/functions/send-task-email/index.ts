@@ -1,8 +1,8 @@
 // Supabase Edge Function to send emails via EmailJS
 // This runs in a browser-like environment, so EmailJS will accept it
 
+// @ts-nocheck
 // @deno-types="https://deno.land/x/types/index.d.ts"
-// @ts-ignore - Deno types are available at runtime
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts"
 
 // CORS headers
@@ -120,7 +120,12 @@ async function handleRequest(req: Request): Promise<Response> {
     // Prepare EmailJS template parameters
     const templateParams = {
       to_email: body.to_email,
-      'to email': body.to_email, // Add support for space in variable name as requested
+      'to email': body.to_email, // Handle space in variable name
+      email: body.to_email,
+      recipient: body.to_email,
+      user_email: body.to_email,
+      target_email: body.to_email,
+      reply_to: 'noreply@smarttrash.com',
       to_name: body.staff_name,
       subject: `📋 New Task Assigned: ${body.task_title}`,
       staff_name: body.staff_name,

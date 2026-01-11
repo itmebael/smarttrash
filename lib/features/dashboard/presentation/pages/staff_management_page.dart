@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/models/user_model.dart';
 import '../../../../core/services/staff_data_service.dart';
+import '../../../../core/services/user_service.dart';
 import '../../../../core/utils/navigation_helper.dart';
 import '../widgets/staff_card.dart';
 import '../widgets/create_staff_dialog.dart';
@@ -31,36 +32,68 @@ class _StaffManagementPageState extends ConsumerState<StaffManagementPage> {
       _isLoading = true;
     });
 
-    // Simulate loading delay
-    Future.delayed(const Duration(milliseconds: 500), () {
-      // Load staff data from service
-      final allStaff = StaffDataService.getAllStaff();
-      setState(() {
-        _staffMembers = allStaff;
-        _isLoading = false;
-      });
+    UserService.getAllUsers().then((users) {
+      if (mounted) {
+        setState(() {
+          // Filter to show only staff members if desired, or all users
+          // The page is "Staff Management", but usually admins manage everyone.
+          // Let's filter out the current user or show everyone.
+          // For now, let's show all users as the mock service did.
+          _staffMembers = users;
+          _isLoading = false;
+        });
+      }
     });
   }
 
-  void _addStaffMember(UserModel newStaff) {
-    StaffDataService.addStaff(newStaff);
-    setState(() {
-      _staffMembers = StaffDataService.getAllStaff();
-    });
+  void _addStaffMember(UserModel? newStaff) {
+    // Reload list to get the latest data
+    _loadStaffMembers();
   }
 
-  void _removeStaffMember(String staffId) {
-    StaffDataService.removeStaff(staffId);
-    setState(() {
-      _staffMembers = StaffDataService.getAllStaff();
-    });
+  void _removeStaffMember(String staffId) async {
+    final success = await UserService.deleteUser(staffId);
+    if (success) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ User deleted successfully'),
+            backgroundColor: AppTheme.primaryGreen,
+          ),
+        );
+        _loadStaffMembers();
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Failed to delete user'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
+        );
+      }
+    }
   }
 
-  void _toggleStaffStatus(String staffId) {
-    StaffDataService.toggleStaffStatus(staffId);
-    setState(() {
-      _staffMembers = StaffDataService.getAllStaff();
-    });
+  void _toggleStaffStatus(String staffId) async {
+    // Find current status
+    final staff = _staffMembers.firstWhere((s) => s.id == staffId);
+    final success = await UserService.toggleUserStatus(staffId, !staff.isActive);
+    
+    if (success) {
+      if (mounted) {
+        _loadStaffMembers();
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Failed to update status'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
+        );
+      }
+    }
   }
 
   @override

@@ -633,6 +633,8 @@ class _CreateStaffAccountPageState
           password: _passwordController.text,
           name: _nameController.text.trim(),
           phoneNumber: _phoneController.text.trim(),
+          department: _departmentController.text.trim(),
+          position: _positionController.text.trim(),
         );
 
         accountSaved = createdUserId != null;

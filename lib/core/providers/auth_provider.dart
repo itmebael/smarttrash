@@ -11,6 +11,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     _initializeAuth();
   }
 
+  // Supabase Configuration
+  // static const String _supabaseUrl = 'https://ssztyskjcoilweqmheef.supabase.co';
+  // static const String _supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzenR5c2tqY29pbHdlcW1oZWVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxODkxMjYsImV4cCI6MjA3Mzc2NTEyNn0.yP0Qihye9C7AiAhVN5_PBziCzfvgRlBu_dcdX9L9SSQ';
+
   SupabaseClient? _supabase;
 
   void _initializeAuth() {
@@ -396,23 +400,78 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
   // Constants from main.dart
   static const _supabaseUrl = 'https://ssztyskjcoilweqmheef.supabase.co';
   static const _supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzenR5c2tqY29pbHdlcW1oZWVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxODkxMjYsImV4cCI6MjA3Mzc2NTEyNn0.yP0Qihye9C7AiAhVN5_PBziCzfvgRlBu_dcdX9L9SSQ';
-
-  /// Convenience helper to sign up staff accounts without affecting current admin session
   /// Returns the User ID if successful, null otherwise
   Future<String?> registerStaff({
     required String email,
     required String password,
     required String name,
     String phoneNumber = '+63-0000000000',
+    String? department,
+    String? position,
+    String? address,
+    String? city,
+    String? state,
+    String? zipCode,
+    int? age,
+    DateTime? dateOfBirth,
+    String? emergencyContact,
+    String? emergencyPhone,
   }) async {
     try {
-      print('🛠️ Registering staff account via isolated client...');
+      print('🛠️ Registering staff account...');
+
+      // 1. Try using the secure Edge Function first (Best Practice)
+      try {
+        print('⚡ Attempting to create user via Edge Function (create-user)...');
+        final functionResponse = await _supabase!.functions.invoke(
+          'create-user',
+          body: {
+            'email': email,
+            'password': password,
+            'name': name,
+            'phone_number': phoneNumber,
+            'role': 'staff',
+            if (department != null) 'department': department,
+            if (position != null) 'position': position,
+            if (address != null) 'address': address,
+            if (city != null) 'city': city,
+            if (state != null) 'state': state,
+            if (zipCode != null) 'zip_code': zipCode,
+            if (age != null) 'age': age,
+            if (dateOfBirth != null) 'date_of_birth': dateOfBirth.toIso8601String(),
+            if (emergencyContact != null) 'emergency_contact': emergencyContact,
+            if (emergencyPhone != null) 'emergency_phone': emergencyPhone,
+          },
+        );
+
+        if (functionResponse.status == 200) {
+          final data = functionResponse.data;
+          print('✅ User created successfully via Edge Function: ${data['user']['id']}');
+          return data['user']['id'];
+        } else {
+          print('⚠️ Edge Function returned error status: ${functionResponse.status}');
+          if (functionResponse.status != 404) {
+             // If it's not a 404 (Function not found), it might be a real error like duplicate email
+             // so we should probably stop here or log it clearly
+             print('   Error details: ${functionResponse.data}');
+          }
+        }
+      } catch (e) {
+        print('⚠️ Edge Function call failed: $e');
+        print('   (This is normal if the function is not deployed yet)');
+      }
+
+      print('🔄 Falling back to client-side creation (Legacy method)...');
       
-      // Use a separate client to avoid affecting the main session (Admin session)
+      // 2. Fallback: Use a separate client to avoid affecting the main session (Admin session)
       // Using pure Dart SupabaseClient to avoid Flutter persistence conflicts
+      // We use AuthFlowType.implicit to avoid needing asyncStorage (PKCE requires storage)
       final tempClient = SupabaseClient(
         _supabaseUrl, 
         _supabaseAnonKey,
+        authOptions: const AuthClientOptions(
+          authFlowType: AuthFlowType.implicit,
+        ),
       );
 
       final response = await tempClient.auth.signUp(
@@ -434,25 +493,36 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
           phoneNumber: phoneNumber,
           role: UserRole.staff,
           createdAt: DateTime.now(),
+          department: department,
+          position: position,
+          address: address,
+          city: city,
+          state: state,
+          zipCode: zipCode,
+          age: age,
+          dateOfBirth: dateOfBirth,
+          emergencyContact: emergencyContact,
+          emergencyPhone: emergencyPhone,
         );
 
         // Save user data to Supabase
-        // Try with temp client first (logged in as new user)
-        try {
-          await tempClient.from('users').insert(user.toMap());
-          print('✅ Staff user inserted into database via temp client');
-        } catch (e) {
-          print('⚠️ Registration insert warning (temp client): $e');
-          // If temp client fails (e.g. RLS issues), try with main Admin client
-          try {
-            print('🔄 Retrying insert with main (Admin) client...');
-            await _supabase!.from('users').insert(user.toMap());
-            print('✅ Staff user inserted into database via Admin client');
-          } catch (e2) {
-             print('❌ Insert failed with both clients: $e2');
-             // We still return true because the account was created in Auth
-          }
-        }
+              try {
+                // Try upsert to handle cases where the user might already exist (e.g. via trigger)
+                await tempClient.from('users').upsert(user.toMap());
+                print('✅ Staff user inserted/updated into database via temp client');
+              } catch (e) {
+                print('⚠️ Registration insert warning (temp client): $e');
+                try {
+                  print('🔄 Retrying insert with main (Admin) client...');
+                  // Admin client should have permission to insert/update users
+                  await _supabase!.from('users').upsert(user.toMap());
+                  print('✅ Staff user inserted/updated into database via Admin client');
+                } catch (e2) {
+                  print('❌ Insert failed with both clients: $e2');
+                  // CRITICAL: Throw error so the UI knows the operation failed
+                  throw Exception('Account created but failed to save profile data. Please contact support.'); 
+                }
+              }
         
         return userId;
       }

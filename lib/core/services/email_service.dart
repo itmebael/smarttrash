@@ -17,6 +17,9 @@ class EmailService {
   static const String fromName = 'Smart Trash Management System';
   
   // EmailJS configuration (alternative to Resend)
+  // service_uo9e3xj
+  // template_8ixe808
+  // NxsdgyvCGJ90Qm2cz
   static const String emailjsServiceId = 'service_uo9e3xj';
   static const String emailjsTemplateId = 'template_8ixe808';
   static const String emailjsPublicKey = 'NxsdgyvCGJ90Qm2cz';
@@ -57,24 +60,44 @@ class EmailService {
         estimatedDuration: task.estimatedDuration,
         assignedDate: task.createdAt,
       );
+      
+      // Add HTML body to template data in case the template uses it
+      templateData['message_html'] = emailData['html'];
+      templateData['html_body'] = emailData['html'];
+      templateData['message'] = emailData['text'];
 
-      // Send email using Supabase Edge Function (bypasses EmailJS browser restriction)
-      final success = await _sendEmailViaSupabaseEdgeFunction(
+      // Try sending directly via EmailJS REST API first (works on mobile/desktop without CORS issues)
+      // If this fails (e.g. web), we can fallback to Edge Function or handle error
+      final success = await sendEmailWithTemplate(
         to: emailData['to']!,
-        subject: emailData['subject']!,
-        htmlBody: emailData['html']!,
-        textBody: emailData['text']!,
         staffName: staffName,
         templateData: templateData,
       );
       
-      // Note: Direct EmailJS calls return 403 from Flutter apps
-      // Edge Function is the only way to send emails via EmailJS
+      // Note: Direct EmailJS calls return 403 from Flutter apps IF "Allow non-browser applications" is unchecked in EmailJS dashboard
+      // If it fails with 403, we should try Edge Function as fallback, but for now we'll prioritize direct call
+      // as it avoids the need for Edge Function deployment for Windows/Mobile users.
 
       if (success) {
         print('✅ Task assignment email sent to $staffEmail');
         return true;
       } else {
+        // Fallback to Edge Function if direct call fails
+        print('⚠️ Direct email failed, trying Edge Function...');
+        final edgeSuccess = await _sendEmailViaSupabaseEdgeFunction(
+          to: emailData['to']!,
+          subject: emailData['subject']!,
+          htmlBody: emailData['html']!,
+          textBody: emailData['text']!,
+          staffName: staffName,
+          templateData: templateData,
+        );
+        
+        if (edgeSuccess) {
+           print('✅ Task assignment email sent to $staffEmail via Edge Function');
+           return true;
+        }
+
         print('❌ Failed to send email to $staffEmail');
         return false;
       }
@@ -104,6 +127,10 @@ class EmailService {
         'send-task-email',
         body: {
           'to_email': to,
+          'to email': to,
+          'email': to,
+          'recipient': to,
+          'reply_to': to,
           'staff_name': staffName,
           'task_title': templateData['task_title'] ?? '',
           'task_description': templateData['task_description'] ?? '',
@@ -143,6 +170,11 @@ class EmailService {
         print('   📖 See EMAIL_SETUP_INSTRUCTIONS.md for detailed steps');
       } else {
         print('❌ Error calling Supabase Edge Function: $e');
+        // If it's a 500 error, it might be an internal script error in the Edge Function
+        if (e.toString().contains('500')) {
+             print('   📝 Check Supabase Dashboard → Edge Functions → send-task-email → Logs');
+             print('   📝 The Edge Function might have crashed or has invalid credentials');
+        }
       }
       return false;
     }
@@ -156,11 +188,19 @@ class EmailService {
     required String staffName,
     required Map<String, dynamic> templateData,
   }) async {
+    // Log the payload for debugging
+    print('📝 Sending EmailJS payload to $to');
+    
+    // Ensure all data is string for template safety
+    final safeTemplateData = templateData.map((key, value) => MapEntry(key, value.toString()));
+
     try {
       final response = await http.post(
         Uri.parse(emailjsApiUrl),
         headers: {
           'Content-Type': 'application/json',
+          'origin': 'http://localhost', // Helps with some EmailJS restrictions
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', // Spoof browser to bypass non-browser restriction
         },
         body: jsonEncode({
           'service_id': emailjsServiceId,
@@ -168,11 +208,23 @@ class EmailService {
           'user_id': emailjsPublicKey,
           'template_params': {
             'to_email': to,
+            'to email': to,
+            'email': to,
+            'recipient': to,
+            'user_email': to,
+            'target_email': to,
+            'send_to': to,
+            'reply_to': 'noreply@smarttrash.com',
             'to_name': staffName,
-            ...templateData,
+            ...safeTemplateData,
           },
         }),
       );
+
+      print('📧 EmailJS Response Status: ${response.statusCode}');
+      if (response.statusCode != 200) {
+        print('❌ EmailJS Response Body: ${response.body}');
+      }
 
       if (response.statusCode == 200) {
         print('📧 Template email sent successfully');

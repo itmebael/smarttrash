@@ -9,6 +9,15 @@ class NotificationService {
   static const String _channelDescription = 'Notifications for smart trashcan app';
   static bool _isInitialized = false;
 
+  // Singleton instance
+  static final NotificationService _instance = NotificationService._internal();
+
+  factory NotificationService() {
+    return _instance;
+  }
+
+  NotificationService._internal();
+  
   static Future<void> initialize() async {
     try {
       // Request permission for notifications

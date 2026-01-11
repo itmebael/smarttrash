@@ -109,7 +109,7 @@ class UserModel {
       'zip_code': zipCode,
       'department': department,
       'position': position,
-      'date_of_birth': dateOfBirth?.toIso8601String(),
+      'date_of_birth': dateOfBirth?.toIso8601String().split('T')[0],
       'emergency_contact': emergencyContact,
       'emergency_phone': emergencyPhone,
     };
